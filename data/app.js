@@ -11,37 +11,133 @@ if (window.__esp32IrHubAppInit) {
   let btnAllOff = null;
   let tabWifiBtn = null;
   let dashboardData = null;
-let usageChart = null;
-let currentRange = "week";
+  let usageChart = null;
+  let currentRange = "week";
 
-function formatThaiDate(ts){
- const d=new Date(Number(ts)*1000);
- return d.toLocaleString("th-TH");
-}
-function getLast7DayLabels()
-{
-    const labels = [];
-
-    for(let i = 6; i >= 0; i--)
-    {
-        const d = new Date();
-
-        d.setDate(d.getDate() - i);
-
-        labels.push(
-            d.toLocaleDateString(
-                "th-TH",
-                {
-                    day: "2-digit",
-                    month: "2-digit"
-                }
-            )
-        );
+  // ===== Data Management (History & Statistics) =====
+  class DataManager {
+    constructor() {
+      this.loadData();
+      this.cleanOldData();
     }
 
-    return labels;
-}
+    loadData() {
+      const historyData = localStorage.getItem('buttonHistory');
+      const statsData = localStorage.getItem('deviceStats');
+      
+      this.history = historyData ? JSON.parse(historyData) : [];
+      this.stats = statsData ? JSON.parse(statsData) : {};
+    }
 
+    saveData() {
+      localStorage.setItem('buttonHistory', JSON.stringify(this.history));
+      localStorage.setItem('deviceStats', JSON.stringify(this.stats));
+    }
+
+    addHistory(buttonName, deviceName, status) {
+      const now = new Date();
+      const timestamp = now.toLocaleString('th-TH');
+      
+      this.history.push({
+        buttonName: buttonName,
+        deviceName: deviceName,
+        status: status,
+        timestamp: timestamp,
+        date: now.toISOString()
+      });
+
+      // Update statistics
+      const key = deviceName;
+      if (!this.stats[key]) {
+        this.stats[key] = {
+          deviceName: deviceName,
+          onCount: 0,
+          offCount: 0,
+          lastAction: timestamp
+        };
+      }
+
+      if (status === 'on') {
+        this.stats[key].onCount++;
+      } else if (status === 'off') {
+        this.stats[key].offCount++;
+      }
+      this.stats[key].lastAction = timestamp;
+
+      this.saveData();
+    }
+
+    cleanOldData() {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      const originalCount = this.history.length;
+      this.history = this.history.filter(item => {
+        const itemDate = new Date(item.date);
+        return itemDate > thirtyDaysAgo;
+      });
+      
+      if (originalCount > this.history.length) {
+        console.log(`ลบข้อมูลเก่า ${originalCount - this.history.length} รายการ`);
+        this.saveData();
+      }
+    }
+
+    getHistory() {
+      return this.history;
+    }
+
+    getStats() {
+      return this.stats;
+    }
+
+    clearHistory() {
+      this.history = [];
+      this.saveData();
+    }
+
+    resetStats() {
+      this.stats = {};
+      this.saveData();
+    }
+  }
+
+  const dataManager = new DataManager();
+
+  function formatThaiDate(ts){
+    const d=new Date(Number(ts)*1000);
+    return d.toLocaleString("th-TH");
+  }
+
+  function getLast7DayLabels() {
+    const labels = [];
+    for(let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(
+        d.toLocaleDateString("th-TH", {
+          day: "2-digit",
+          month: "2-digit"
+        })
+      );
+    }
+    return labels;
+  }
+
+  function getLast30DayLabels() {
+    const labels = [];
+    for(let i=29;i>=0;i--) {
+      const d=new Date();
+      d.setDate(d.getDate()-i);
+      labels.push(
+        d.toLocaleDateString("th-TH", {
+          day:"2-digit",
+          month:"2-digit"
+        })
+      );
+    }
+    return labels;
+  }
 
   // ===== status interval control (Option 2: smooth) =====
   let statusInterval = null;
@@ -66,40 +162,34 @@ function getLast7DayLabels()
     expectedOffName: "",
     startedUsedCount: 0,
   };
-async function loadDashboard() {
-try {
-    const r = await fetch("/api/dashboard");
-    const data = await r.json();
 
-    document.getElementById("dash-today").innerHTML = data.today + `<div class="small">${data.todayTopDevice||"ไม่มีข้อมูล"}${data.todayTopCount?` (${data.todayTopCount})`:``}</div>`;
-    document.getElementById("dash-week").innerHTML = data.week + `<div class="small">${data.weekTopDevice||"ไม่มีข้อมูล"}${data.weekTopCount?` (${data.weekTopCount})`:``}</div>`;
-    document.getElementById("dash-month").innerHTML = data.month + `<div class="small">${data.monthTopDevice||"ไม่มีข้อมูล"}${data.monthTopCount?` (${data.monthTopCount})`:``}</div>`;
+  async function loadDashboard() {
+    try {
+      const r = await fetch("/api/dashboard");
+      const data = await r.json();
 
-    dashboardData = data;
+      document.getElementById("dash-today").innerHTML = data.today + `<div class="small">${data.todayTopDevice||"ไม่มีข้อมูล"}${data.todayTopCount?` (${data.todayTopCount})`:``}</div>`;
+      document.getElementById("dash-week").innerHTML = data.week + `<div class="small">${data.weekTopDevice||"ไม่มีข้อมูล"}${data.weekTopCount?` (${data.weekTopCount})`:``}</div>`;
+      document.getElementById("dash-month").innerHTML = data.month + `<div class="small">${data.monthTopDevice||"ไม่มีข้อมูล"}${data.monthTopCount?` (${data.monthTopCount})`:``}</div>`;
 
-    updateChart();
+      dashboardData = data;
+      updateChart();
 
-    const tbody = document.getElementById("stats-table");
-
-    if (tbody && data.devices) {
-
+      const tbody = document.getElementById("stats-table");
+      if (tbody && data.devices) {
         tbody.innerHTML = "";
-
         data.devices.forEach(d => {
-
-            tbody.innerHTML += `
-<tr>
-<td>${d.name}</td>
-<td>${d.onCount}</td>
-<td>${Number(d.minutes).toFixed(1)}</td>
-<td>${Number(d.avgMinutes).toFixed(1)}</td>
-</tr>`;
-
+          tbody.innerHTML += `
+          <tr>
+          <td>${d.name}</td>
+          <td>${d.onCount}</td>
+          <td>${Number(d.minutes).toFixed(1)}</td>
+          <td>${Number(d.avgMinutes).toFixed(1)}</td>
+          </tr>`;
         });
-
-    }
-} catch(e){ console.error(e); }
-}
+      }
+    } catch(e){ console.error(e); }
+  }
 
   async function api(path, opts={}){
     const res = await fetch(path, opts);
@@ -207,103 +297,103 @@ try {
     const devices = new Map();
 
     for (const k of keys) {
-        if (!k.used) continue;
+      if (!k.used) continue;
 
-        const parts = (k.name || "").split(":");
-        if (parts.length < 2) continue;
+      const parts = (k.name || "").split(":");
+      if (parts.length < 2) continue;
 
-        const devName = parts[0].trim();
-        const btnName = parts.slice(1).join(":").trim();
+      const devName = parts[0].trim();
+      const btnName = parts.slice(1).join(":").trim();
 
-        if (!devices.has(devName)) {
-            devices.set(devName, {
-                name: devName,
-                buttons: [],
-                onSlot: null,
-                offSlot: null
-            });
-        }
-
-        const d = devices.get(devName);
-
-        d.buttons.push({
-            name: btnName,
-            slot: k.slot
+      if (!devices.has(devName)) {
+        devices.set(devName, {
+          name: devName,
+          buttons: [],
+          onSlot: null,
+          offSlot: null
         });
+      }
 
-        if (btnName.toUpperCase() === "ON")
-            d.onSlot = k.slot;
+      const d = devices.get(devName);
 
-        if (btnName.toUpperCase() === "OFF")
-            d.offSlot = k.slot;
+      d.buttons.push({
+        name: btnName,
+        slot: k.slot
+      });
+
+      if (btnName.toUpperCase() === "ON")
+        d.onSlot = k.slot;
+
+      if (btnName.toUpperCase() === "OFF")
+        d.offSlot = k.slot;
     }
 
     return [...devices.values()];
-}
+  }
 
   function setVisible(el, yes){
     if(!el) return;
     el.style.display = yes ? "" : "none";
   }
-/* =========================
-   Tabs
-   ========================= */
 
-function setTab(tabName){
+  /* =========================
+     Tabs
+     ========================= */
 
-  document
-    .querySelectorAll(".panel")
-    .forEach(p => p.classList.remove("show"));
+  function setTab(tabName){
+    document
+      .querySelectorAll(".panel")
+      .forEach(p => p.classList.remove("show"));
 
-  document
-    .querySelectorAll(".tab")
-    .forEach(t => t.classList.remove("active"));
+    document
+      .querySelectorAll(".tab")
+      .forEach(t => t.classList.remove("active"));
 
-  const panel =
-    document.getElementById(`tab-${tabName}`);
+    const panel =
+      document.getElementById(`tab-${tabName}`);
 
-  if(panel)
-    panel.classList.add("show");
+    if(panel)
+      panel.classList.add("show");
 
-  const tabBtn =
-    document.querySelector(
-      `.tab[data-tab="${tabName}"]`
-    );
+    const tabBtn =
+      document.querySelector(
+        `.tab[data-tab="${tabName}"]`
+      );
 
-  if(tabBtn)
-    tabBtn.classList.add("active");
+    if(tabBtn)
+      tabBtn.classList.add("active");
 
-  if(tabName === "dashboard"){
-    loadDashboard().catch(console.error);
+    if(tabName === "dashboard"){
+      loadDashboard().catch(console.error);
+    }
+
+    if(tabName === "history"){
+      loadHistory().catch(console.error);
+    }
+
+    if(tabName === "stats"){
+      loadStatistics().catch(console.error);
+    }
+
+    if(tabName === "graph"){
+      loadGraphs().catch(console.error);
+    }
   }
 
-  if(tabName === "history"){
-    loadHistory().catch(console.error);
-  }
+  function initTabs(){
+    document
+      .querySelectorAll(".tab")
+      .forEach(btn => {
+        btn.addEventListener("click", () => {
+          const tab =
+            btn.dataset.tab;
 
-  if(tabName === "stats"){
-    loadDashboard().catch(console.error);
-  }
-}
-
-function initTabs(){
-
-  document
-    .querySelectorAll(".tab")
-    .forEach(btn => {
-
-      btn.addEventListener("click", () => {
-
-        const tab =
-          btn.dataset.tab;
-
-        if(tab)
-          setTab(tab);
-
+          if(tab)
+            setTab(tab);
+        });
       });
+  }
 
-    });
-}
   function updateWifiTabVisibilityFromStatus(st){
     if(!tabWifiBtn) return;
     setVisible(tabWifiBtn, true);
@@ -317,7 +407,6 @@ function initTabs(){
       advancedDetails.style.display = "";
     }else{
       advancedDetails.style.display = "none";
-      // ปิด details ถ้าเปิดอยู่
       advancedDetails.open = false;
     }
   }
@@ -330,13 +419,10 @@ function initTabs(){
     const keysData = await api("/api/keys");
     const devices = buildDevicesFromKeys(keysData.keys || []);
     
-    // เก็บค่าเดิม
     const prevValue = select.value;
     
-    // ล้างตัวเลือก (เก็บ placeholder ไว้)
     select.innerHTML = '<option value="">-- เลือกอุปกรณ์ --</option>';
     
-    // เพิ่มอุปกรณ์
     devices.forEach(d => {
       const opt = document.createElement("option");
       opt.value = d.name;
@@ -344,10 +430,8 @@ function initTabs(){
       select.appendChild(opt);
     });
     
-    // คืนค่าเดิมถ้ายังอยู่
     select.value = prevValue;
     
-    // Disable/Enable ปุ่มเริ่มตามสถานะ
     updateLearnButtonState();
   }
 
@@ -358,7 +442,6 @@ function initTabs(){
     
     if(!btnStart) return;
     
-    // Enable ปุ่มได้เมื่อ: เลือกอุปกรณ์ + ใส่ชื่อปุ่ม
     const hasDevice = deviceSelect && deviceSelect.value !== "";
     const hasName = learnName && learnName.value.trim() !== "";
     
@@ -373,7 +456,6 @@ function initTabs(){
     setVisible(btnAllOn, hasDevice);
     setVisible(btnAllOff, hasDevice);
 
-    // อัพเดต device dropdown
     await updateDeviceSelectDropdown();
     updateAdvancedLearnVisibility(hasDevice);
 
@@ -467,45 +549,49 @@ function initTabs(){
     // ===== สร้างปุ่มทั้งหมดของอุปกรณ์ =====
     d.buttons.forEach(btn => {
 
-        const b = document.createElement("button");
+      const b = document.createElement("button");
 
-        const upper = btn.name.toUpperCase();
+      const upper = btn.name.toUpperCase();
 
-        if (upper === "ON") {
-            b.className = "btn primary";
-            b.textContent = "เปิด";
+      if (upper === "ON") {
+        b.className = "btn primary";
+        b.textContent = "เปิด";
+      }
+      else if (upper === "OFF") {
+        b.className = "btn danger";
+        b.textContent = "ปิด";
+      }
+      else {
+        b.className = "btn";
+        b.textContent = btn.name;
+      }
+
+      b.onclick = async () => {
+        b.disabled = true;
+        try {
+          await api(`/api/send?slot=${btn.slot}`, {
+            method: "POST"
+          });
+
+          // Record action
+          const status = upper === "ON" ? "on" : (upper === "OFF" ? "off" : "click");
+          dataManager.addHistory(btn.name, d.name, status);
+
+          const old = b.textContent;
+          b.textContent = "ส่งแล้ว";
+
+          setTimeout(() => {
+            b.textContent = old;
+          }, 800);
+
+        } catch (e) {
+          alert(`ส่งไม่สำเร็จ: ${e.error || JSON.stringify(e)}`);
+        } finally {
+          b.disabled = false;
         }
-        else if (upper === "OFF") {
-            b.className = "btn danger";
-            b.textContent = "ปิด";
-        }
-        else {
-            b.className = "btn";
-            b.textContent = btn.name;
-        }
+      };
 
-        b.onclick = async () => {
-            b.disabled = true;
-            try {
-                await api(`/api/send?slot=${btn.slot}`, {
-                    method: "POST"
-                });
-
-                const old = b.textContent;
-                b.textContent = "ส่งแล้ว";
-
-                setTimeout(() => {
-                    b.textContent = old;
-                }, 800);
-
-            } catch (e) {
-                alert(`ส่งไม่สำเร็จ: ${e.error || JSON.stringify(e)}`);
-            } finally {
-                b.disabled = false;
-            }
-        };
-
-        row.appendChild(b);
+      row.appendChild(b);
     });
 
     // ===== ปุ่มลบอุปกรณ์ =====
@@ -515,33 +601,32 @@ function initTabs(){
 
     btnDel.onclick = async () => {
 
-        if (!confirm(`ลบ "${d.name}" ทั้งหมด?`))
-            return;
+      if (!confirm(`ลบ "${d.name}" ทั้งหมด?`))
+        return;
 
-        btnDel.disabled = true;
+      btnDel.disabled = true;
 
-        try {
+      try {
 
-            // ลบทุกปุ่มของอุปกรณ์
-            for (const btn of d.buttons) {
-                await api(`/api/delete?slot=${btn.slot}`, {
-                    method: "POST"
-                });
-            }
-
-            await refreshKeys();
-
-            alert("ลบสำเร็จ");
-
-        } catch (e) {
-
-            alert(`ลบไม่สำเร็จ: ${e.error || JSON.stringify(e)}`);
-
-        } finally {
-
-            btnDel.disabled = false;
-
+        for (const btn of d.buttons) {
+          await api(`/api/delete?slot=${btn.slot}`, {
+            method: "POST"
+          });
         }
+
+        await refreshKeys();
+
+        alert("ลบสำเร็จ");
+
+      } catch (e) {
+
+        alert(`ลบไม่สำเร็จ: ${e.error || JSON.stringify(e)}`);
+
+      } finally {
+
+        btnDel.disabled = false;
+
+      }
 
     };
 
@@ -550,7 +635,7 @@ function initTabs(){
     div.appendChild(row);
 
     return div;
-}
+  }
 
   /* =========================
      API: keys/status
@@ -595,11 +680,9 @@ function initTabs(){
   async function refreshStatus(){
     const st = await api("/api/status");
     
-    // ⭐ เพิ่ม null check
     const statusBox = $("#status-box");
     if(statusBox) statusBox.textContent = JSON.stringify(st, null, 2);
 
-    // manual learn UI
     const learnPill = $("#learn-pill");
     const learnProg = $("#learn-progress");
     if(learnPill) learnPill.textContent = st.learn.status;
@@ -609,7 +692,6 @@ function initTabs(){
         : `พร้อมใช้งาน`;
     }
 
-    // wifi UI
     const apEnabled = !!st.wifi.ap_enabled;
     const wifiLine = `AP(${apEnabled ? "ON" : "OFF"}): ${st.wifi.ap_ip || "—"} • STA: ${st.wifi.sta_connected ? st.wifi.sta_ip : "not connected"}`;
     const wifiState = $("#wifi-state");
@@ -621,7 +703,6 @@ function initTabs(){
         : "ยังไม่เชื่อมต่อ STA";
     }
     
-    // Update the new WiFi status display
     updateWifiStatusDisplay(st);
     
     updateApToggleButton(apEnabled);
@@ -655,6 +736,7 @@ function initTabs(){
       const slot = (mode === "ON") ? d.onSlot : d.offSlot;
       try{
         await apiSendSlot(slot);
+        dataManager.addHistory("All", d.name, mode.toLowerCase());
       }catch(e){
         console.warn(`send ${mode} failed for ${d.name}`, e);
       }
@@ -928,7 +1010,6 @@ function initTabs(){
 
   $("#learn-name")?.addEventListener("input", updateLearnButtonState);
 
-  // ⭐ แก้ไข: Advanced Learn - auto refresh เมื่อเสร็จ
   $("#btn-learn-start")?.addEventListener("click", async ()=>{
     const deviceSelect = $("#device-select");
     const learnName = $("#learn-name");
@@ -954,31 +1035,26 @@ function initTabs(){
       await api(`/api/learn/start?name=${encodeURIComponent(fullName)}`, { method:"POST" });
       await refreshStatus();
       
-      // ⭐ รอให้เรียนรู้เสร็จ และ auto refresh
       let learned = false;
-      for(let i = 0; i < 15; i++){  // รอสูงสุด 15 วินาที (10 วินาที timeout + buffer)
+      for(let i = 0; i < 15; i++){
         await new Promise(r => setTimeout(r, 800));
         const st = await api("/api/status");
         
         if(!st.learn.active && st.learn.status === "saved"){
-          // ✅ เรียนรู้เสร็จแล้ว!
           learned = true;
           break;
         }
         
         if(st.learn.status === "timeout" || st.learn.status === "mismatch_try_again"){
-          // ❌ เรียนรู้ล้มเหลว
           break;
         }
       }
       
-      // ⭐ Auto refresh การ์ด
       await refreshKeys();
       await refreshStatus();
       
       if(learned){
         alert(`เรียนรู้ "${fullName}" สำเร็จ! ✅`);
-        // ล้างฟอร์ม
         learnName.value = "";
         updateLearnButtonState();
       }else{
@@ -1056,7 +1132,6 @@ function initTabs(){
     updateSelectedWifiLabel(ev?.target?.value || "");
   });
 
-  // Refresh WiFi status manually
   $("#btn-wifi-refresh-status")?.addEventListener("click", refreshStatus);
 
   $("#btn-wifi-load")?.addEventListener("click", async ()=>{
@@ -1126,130 +1201,177 @@ function initTabs(){
       alert(`บันทึกไม่ได้: ${e.error || JSON.stringify(e)}`);
     }
   });
-async function loadHistory() {
 
-    const r = await fetch("/api/history");
-    const txt = await r.text();
-
-    const historyList =
-        document.getElementById("history-list");
-
-    const lines = txt.trim().split("\n");
-
-    if (lines.length <= 1) {
-        historyList.innerHTML =
-            "<div>ยังไม่มีข้อมูล</div>";
-        return;
+  // ===== History Panel =====
+  async function loadHistory() {
+    const history = dataManager.getHistory();
+    const tbody = document.getElementById("history-list");
+    
+    if (!tbody) return;
+    
+    if (history.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #999;">ยังไม่มีข้อมูล</td></tr>';
+      return;
     }
-
-    let html =
-        '<table class="table"><tbody>';
-
-    for(let i=1;i<lines.length;i++)
-    {
-        const c = lines[i].split(",");
-
-        html += `
+    
+    tbody.innerHTML = history
+      .reverse()
+      .map(item => `
         <tr>
-            <td>${formatThaiDate(c[0])}</td>
-            <td>${c[1]}</td>
-            <td>${c[2]}</td>
-        </tr>`;
+          <td>${item.timestamp}</td>
+          <td>${escapeHtml(item.buttonName)}</td>
+          <td>${escapeHtml(item.deviceName)}</td>
+          <td>${item.status === 'on' ? '✅ เปิด' : (item.status === 'off' ? '❌ ปิด' : '⚙️ ' + item.status)}</td>
+        </tr>
+      `)
+      .join('');
+  }
+
+  // ===== Statistics Panel =====
+  async function loadStatistics() {
+    const stats = dataManager.getStats();
+    const tbody = document.getElementById("stats-table");
+    
+    if (!tbody) return;
+    
+    if (Object.keys(stats).length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #999;">ยังไม่มีข้อมูล</td></tr>';
+      return;
+    }
+    
+    tbody.innerHTML = Object.values(stats)
+      .map(item => `
+        <tr>
+          <td>${escapeHtml(item.deviceName)}</td>
+          <td>${item.onCount}</td>
+          <td>${item.offCount}</td>
+          <td>${item.onCount + item.offCount}</td>
+        </tr>
+      `)
+      .join('');
+  }
+
+  // ===== Graph Panel =====
+  let onOffChart = null;
+  let deviceChart = null;
+
+  async function loadGraphs() {
+    const stats = dataManager.getStats();
+    
+    if (Object.keys(stats).length === 0) {
+      console.log("ยังไม่มีข้อมูลสำหรับกราฟ");
+      return;
     }
 
-    html += "</tbody></table>";
-
-    historyList.innerHTML = html;
-}
-function drawChart(labels,data,title)
-{
-    const ctx =
-        document
-        .getElementById("weekChart")
-        .getContext("2d");
-
-    if(usageChart)
-        usageChart.destroy();
-
-    usageChart = new Chart(ctx,{
-        type:"bar",
-
-        data:{
-            labels,
-            datasets:[{
-                label:title,
-                data,
-                borderRadius:10
-            }]
+    // ON/OFF Chart
+    const devices = Object.keys(stats);
+    const onCounts = devices.map(d => stats[d].onCount);
+    const offCounts = devices.map(d => stats[d].offCount);
+    
+    const onOffCtx = document.getElementById("onOffChart");
+    if (onOffChart) onOffChart.destroy();
+    
+    onOffChart = new Chart(onOffCtx, {
+      type: 'bar',
+      data: {
+        labels: devices,
+        datasets: [
+          {
+            label: 'ครั้งที่เปิด (ON)',
+            data: onCounts,
+            backgroundColor: '#4CAF50'
+          },
+          {
+            label: 'ครั้งที่ปิด (OFF)',
+            data: offCounts,
+            backgroundColor: '#FF6B6B'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true }
         },
-
-        options:{
-            responsive:true,
-            maintainAspectRatio:false,
-
-            plugins:{
-                legend:{
-                    display:false
-                }
-            }
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { stepSize: 1 }
+          }
         }
+      }
     });
-}
-function updateChart()
-{
-    if(!dashboardData)
-        return;
 
-    if(currentRange==="day")
-    {
-        drawChart(
-            ["วันนี้"],
-            [dashboardData.today],
-            "วันนี้"
-        );
+    // Device Chart
+    const totalActions = devices.map(d => stats[d].onCount + stats[d].offCount);
+    
+    const deviceCtx = document.getElementById("deviceChart");
+    if (deviceChart) deviceChart.destroy();
+    
+    const colors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe', '#43e97b', '#fa709a', '#fee140'];
+    
+    deviceChart = new Chart(deviceCtx, {
+      type: 'doughnut',
+      data: {
+        labels: devices,
+        datasets: [{
+          data: totalActions,
+          backgroundColor: colors.slice(0, devices.length)
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: true, position: 'bottom' }
+        }
+      }
+    });
+  }
+
+  // ===== Control Buttons =====
+  $("#btn-export-history")?.addEventListener("click", () => {
+    const history = dataManager.getHistory();
+    const stats = dataManager.getStats();
+    
+    const exportData = {
+      exportDate: new Date().toLocaleString('th-TH'),
+      history: history,
+      statistics: stats
+    };
+    
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `demote_export_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    alert("ดาวน์โหลดเรียบร้อยแล้ว!");
+  });
+
+  $("#btn-clear-history")?.addEventListener("click", () => {
+    if (confirm("คุณแน่ใจหรือว่าต้องการล้างประวัติทั้งหมด?")) {
+      dataManager.clearHistory();
+      loadHistory();
+      loadStatistics();
+      loadGraphs();
+      alert("ล้างประวัติเรียบร้อยแล้ว!");
     }
+  });
 
-    else if(currentRange==="week")
-    {
-        drawChart(
-            getLast7DayLabels(),
-            dashboardData.weekGraph,
-            "สัปดาห์"
-        );
+  $("#btn-reset-stats")?.addEventListener("click", () => {
+    if (confirm("คุณแน่ใจหรือว่าต้องการรีเซ็ตสถิติทั้งหมด?")) {
+      dataManager.resetStats();
+      loadStatistics();
+      loadGraphs();
+      alert("รีเซ็ตสถิติเรียบร้อยแล้ว!");
     }
+  });
 
-    else if(currentRange==="month")
-    {
-       drawChart(
-    getLast30DayLabels(),
-    dashboardData.monthGraph,
-    "30 วันย้อนหลัง"
-);
-    }
-}
-function getLast30DayLabels()
-{
-    const labels=[];
-
-    for(let i=29;i>=0;i--)
-    {
-        const d=new Date();
-
-        d.setDate(d.getDate()-i);
-
-        labels.push(
-            d.toLocaleDateString(
-                "th-TH",
-                {
-                    day:"2-digit",
-                    month:"2-digit"
-                }
-            )
-        );
-    }
-
-    return labels;
-}
   /* =========================
      Buttons
      ========================= */
@@ -1269,23 +1391,20 @@ function getLast30DayLabels()
 
     setupAllButtons();
     document
-    .querySelectorAll(".segment-btn")
-    .forEach(btn => {
+      .querySelectorAll(".segment-btn")
+      .forEach(btn => {
+        btn.addEventListener("click", () => {
+          document
+            .querySelectorAll(".segment-btn")
+            .forEach(x => x.classList.remove("active"));
 
-      btn.addEventListener("click", () => {
+          btn.classList.add("active");
 
-        document
-        .querySelectorAll(".segment-btn")
-        .forEach(x => x.classList.remove("active"));
+          currentRange = btn.dataset.range;
 
-        btn.classList.add("active");
-
-        currentRange = btn.dataset.range;
-
-        updateChart();
-
+          updateChart();
+        });
       });
-    });
     renderWifiHistory();
     updateSelectedWifiLabel($("#wifi-ssid")?.value || "");
 
@@ -1296,23 +1415,72 @@ function getLast30DayLabels()
     await refreshKeys();
     await refreshStatus();
     await loadDashboard();
+    await loadHistory();
+    await loadStatistics();
     startStatusInterval();
+
+    // Auto cleanup old data every hour
+    setInterval(() => {
+      dataManager.cleanOldData();
+    }, 60 * 60 * 1000);
   })();
 }
 
-
 async function renderWifiConnectionInfo(){
- try{
-   const r=await fetch('/api/status');
-   const s=await r.json();
-   const el=document.getElementById('wifi-current-info');
-   if(!el) return;
-   if(s.wifi && s.wifi.sta_connected){
+  try{
+    const r=await fetch('/api/status');
+    const s=await r.json();
+    const el=document.getElementById('wifi-current-info');
+    if(!el) return;
+    if(s.wifi && s.wifi.sta_connected){
       el.textContent='📶 '+s.wifi.sta_ssid+' ('+s.wifi.sta_ip+')';
-   }else{
+    }else{
       el.textContent='ไม่ได้เชื่อมต่อ Wi‑Fi';
-   }
- }catch(e){}
+    }
+  }catch(e){}
 }
 setInterval(renderWifiConnectionInfo,5000);
 document.addEventListener('DOMContentLoaded',renderWifiConnectionInfo);
+
+function drawChart(labels,data,title) {
+  const ctx = document.getElementById("weekChart").getContext("2d");
+
+  if(usageChart)
+    usageChart.destroy();
+
+  usageChart = new Chart(ctx,{
+    type:"bar",
+    data:{
+      labels,
+      datasets:[{
+        label:title,
+        data,
+        borderRadius:10
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{
+        legend:{
+          display:false
+        }
+      }
+    }
+  });
+}
+
+function updateChart() {
+  if(!dashboardData)
+    return;
+
+  if(currentRange==="day") {
+    drawChart(["วันนี้"], [dashboardData.today], "วันนี้");
+  }
+  else if(currentRange==="week") {
+    drawChart(getLast7DayLabels(), dashboardData.weekGraph, "สัปดาห์");
+  }
+  else if(currentRange==="month") {
+    drawChart(getLast30DayLabels(), dashboardData.monthGraph, "30 วันย้อนหลัง");
+  }
+}
