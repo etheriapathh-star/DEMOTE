@@ -26,6 +26,8 @@
 
             <button class="tab" data-tab="stats">📊 สถิติ</button>
 
+            <button class="tab" data-tab="graph">📈 กราฟ</button>
+
             <button class="tab" data-tab="learn">➕ เพิ่มอุปกรณ์</button>
 
             <button id="tab-wifi-btn" class="tab" data-tab="wifi">⚙️ ตั้งค่า</button>
@@ -81,7 +83,7 @@
                         <div class="small" id="dev-tip">กดเริ่ม แล้วทำตามขั้นตอน: เปิด → ปิด</div>
                     </div>
                     <div class="small" style="margin-top:8px; opacity:.9">
-                        ระบบจะบันทึกชื่อให้อัตโนมัติเป็น <b>ชื่ออุปกรณ์:ON</b> และ <b>ชื่ออุ[...]
+                        ระบบจะบันทึกชื่อให้อัตโนมัติเป็น <b>ชื่ออุปกรณ์:ON</b> และ <b>ชื่ออุปกรณ์:OFF</b>
                     </div>
                 </div>
             </div>
@@ -162,14 +164,14 @@
                 <div class="small" id="wifi-live-status">—</div>
             </div>
         </section>
-        <section id="tab-dashboard" class="panel show">
 
+        <!-- Dashboard Panel -->
+        <section id="tab-dashboard" class="panel show">
             <div class="panel-head">
                 <h2>ภาพรวมการใช้งาน</h2>
             </div>
 
             <div class="grid">
-
                 <div class="card">
                     <h3>วันนี้</h3>
                     <div id="dash-today">0</div>
@@ -184,67 +186,89 @@
                     <h3>เดือนนี้</h3>
                     <div id="dash-month">0</div>
                 </div>
-
             </div>
 
             <div class="card">
-
                 <h3>กราฟการใช้งาน</h3>
 
                 <div class="segment-control">
-
-                    <button class="segment-btn" data-range="day">
-                        วัน
-                    </button>
-
-                    <button class="segment-btn active" data-range="week">
-                        สัปดาห์
-                    </button>
-
-                    <button class="segment-btn" data-range="month">
-                        เดือน
-                    </button>
-
+                    <button class="segment-btn" data-range="day">วัน</button>
+                    <button class="segment-btn active" data-range="week">สัปดาห์</button>
+                    <button class="segment-btn" data-range="month">เดือน</button>
                 </div>
 
                 <div class="chart-wrap">
                     <canvas id="weekChart"></canvas>
                 </div>
-
             </div>
-
         </section>
+
+        <!-- History Panel -->
         <section id="tab-history" class="panel">
-
             <div class="panel-head">
-                <h2>ประวัติการใช้งาน</h2>
-            </div>
-
-            <div id="history-list"></div>
-
-        </section>
-        <section id="tab-stats" class="panel">
-
-            <div class="panel-head">
-                <h2>สถิติการใช้งาน</h2>
+                <h2>📋 ประวัติการใช้งาน</h2>
+                <div style="display: flex; gap: 8px;">
+                    <button id="btn-export-history" class="btn">📥 ดาวน์โหลด</button>
+                    <button id="btn-clear-history" class="btn danger">🗑️ ล้างประวัติ</button>
+                </div>
             </div>
 
             <table class="table">
+                <thead>
+                    <tr>
+                        <th>เวลา</th>
+                        <th>ชื่อปุ่ม</th>
+                        <th>อุปกรณ์</th>
+                        <th>สถานะ</th>
+                    </tr>
+                </thead>
+                <tbody id="history-list">
+                    <tr><td colspan="4" style="text-align: center; color: #999;">ยังไม่มีข้อมูล</td></tr>
+                </tbody>
+            </table>
+        </section>
 
+        <!-- Statistics Panel -->
+        <section id="tab-stats" class="panel">
+            <div class="panel-head">
+                <h2>📊 สถิติการใช้งาน</h2>
+                <button id="btn-reset-stats" class="btn danger">🔄 รีเซ็ต</button>
+            </div>
+
+            <table class="table">
                 <thead>
                     <tr>
                         <th>อุปกรณ์</th>
-                        <th>เปิด(ครั้ง)</th>
-                        <th>รวม(นาที)</th>
-                        <th>เฉลี่ย/ครั้ง</th>
+                        <th>เปิด (ON)</th>
+                        <th>ปิด (OFF)</th>
+                        <th>รวม</th>
                     </tr>
                 </thead>
-
                 <tbody id="stats-table">
+                    <tr><td colspan="4" style="text-align: center; color: #999;">ยังไม่มีข้อมูล</td></tr>
                 </tbody>
-
             </table>
+        </section>
 
+        <!-- Graph Panel -->
+        <section id="tab-graph" class="panel">
+            <div class="panel-head">
+                <h2>📈 กราฟ ON/OFF</h2>
+            </div>
+
+            <div class="card">
+                <h3>จำนวนครั้งเปิด/ปิดอุปกรณ์</h3>
+                <div class="chart-wrap">
+                    <canvas id="onOffChart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>รายละเอียดอุปกรณ์ (รวมทั้งหมด)</h3>
+                <div class="chart-wrap">
+                    <canvas id="deviceChart"></canvas>
+                </div>
+            </div>
         </section>
     </main>
 
