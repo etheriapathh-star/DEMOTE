@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEMOTE - ระบบติดตามอุปกรณ์</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h1 class="logo">DEMOTE</h1>
+            <ul class="nav-menu">
+                <li><a href="#" onclick="showPage('dashboard')">หน้าหลัก</a></li>
+                <li><a href="#" onclick="showPage('history')">ประวัติ</a></li>
+                <li><a href="#" onclick="showPage('statistics')">สถิติ</a></li>
+                <li><a href="#" onclick="showPage('graph')">กราฟ</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- หน้าหลัก -->
+    <div id="dashboard" class="page active">
+        <div class="container">
+            <h2>หน้าหลัก</h2>
+            <div class="button-panel">
+                <h3>เลือกอุปกรณ์:</h3>
+                <div class="device-list">
+                    <button class="device-btn" onclick="recordAction('Button-1', 'on')">🔘 ปุ่ม 1 (ON)</button>
+                    <button class="device-btn" onclick="recordAction('Button-1', 'off')">🔘 ปุ่ม 1 (OFF)</button>
+                    
+                    <button class="device-btn" onclick="recordAction('Button-2', 'on')">🔘 ปุ่ม 2 (ON)</button>
+                    <button class="device-btn" onclick="recordAction('Button-2', 'off')">🔘 ปุ่ม 2 (OFF)</button>
+                    
+                    <button class="device-btn" onclick="recordAction('Switch-1', 'on')">⚡ สวิตช์ 1 (ON)</button>
+                    <button class="device-btn" onclick="recordAction('Switch-1', 'off')">⚡ สวิตช์ 1 (OFF)</button>
+                    
+                    <button class="device-btn" onclick="recordAction('Device-3', 'on')">🖥️ อุปกรณ์ 3 (ON)</button>
+                    <button class="device-btn" onclick="recordAction('Device-3', 'off')">🖥️ อุปกรณ์ 3 (OFF)</button>
+                </div>
+            </div>
+            <div class="status-box">
+                <p>สถานะล่าสุด: <span id="lastStatus">ยังไม่มีการบันทึก</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- หน้าประวัติ -->
+    <div id="history" class="page">
+        <div class="container">
+            <h2>ประวัติการกดปุ่ม</h2>
+            <div class="history-controls">
+                <button onclick="clearHistory()" class="btn-danger">ล้างประวัติ</button>
+                <button onclick="exportHistory()" class="btn-primary">ดาวน์โหลด</button>
+            </div>
+            <div class="history-list" id="historyList">
+                <p class="empty">ยังไม่มีประวัติ</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- หน้าสถิติ -->
+    <div id="statistics" class="page">
+        <div class="container">
+            <h2>สถิติ</h2>
+            <div class="stats-grid" id="statsGrid">
+                <p class="empty">กำลังโหลดข้อมูล...</p>
+            </div>
+            <div class="stats-controls">
+                <button onclick="resetStatistics()" class="btn-danger">รีเซ็ตสถิติ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- หน้ากราฟ -->
+    <div id="graph" class="page">
+        <div class="container">
+            <h2>กราฟการใช้งาน</h2>
+            <div class="graph-container">
+                <div style="width: 100%; max-width: 800px; margin: 0 auto;">
+                    <h3>จำนวนครั้งการเปิด/ปิดอุปกรณ์</h3>
+                    <canvas id="onOffChart"></canvas>
+                </div>
+            </div>
+            <div class="graph-container">
+                <div style="width: 100%; max-width: 800px; margin: 0 auto;">
+                    <h3>รายละเอียดอุปกรณ์</h3>
+                    <canvas id="deviceChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>DEMOTE System © 2026 | ระบบติดตามอุปกรณ์อัจฉริยะ</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
